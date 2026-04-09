@@ -99,6 +99,17 @@
             -webkit-text-stroke: 1.5px white;
             color: transparent;
         }
+    /* Force GPU compositing for columns layout — fixes invisible-until-hover bug */
+    #photo-grid img {
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
+        display: block;
+        width: 100%;
+    }
+    #photo-grid > div {
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
+    }
     </style>
 </head>
 <body class="bg-surface text-on-surface font-body selection:bg-primary selection:text-white overflow-x-hidden">
@@ -116,6 +127,7 @@
 <a class="font-funky text-[10px] uppercase transition-all duration-300 text-on-surface-variant hover:text-primary" href="#" onclick="openAlbum('d3');document.getElementById('gallery').scrollIntoView({behavior:'smooth'});return false;">Day 3</a>
 <a class="font-funky text-[10px] uppercase transition-all duration-300 text-on-surface-variant hover:text-primary" href="#" onclick="openAlbum('moto');document.getElementById('gallery').scrollIntoView({behavior:'smooth'});return false;">Moto Show</a>
 <a class="font-funky text-[10px] uppercase transition-all duration-300 text-on-surface-variant hover:text-primary" href="#" onclick="openAlbum('ethnic');document.getElementById('gallery').scrollIntoView({behavior:'smooth'});return false;">Ethnic Day</a>
+<a class="font-funky text-[10px] uppercase transition-all duration-300 text-on-surface-variant hover:text-primary" href="#" onclick="openPreUtsav();document.getElementById('gallery').scrollIntoView({behavior:'smooth'});return false;">Pre UTSAV</a>
 </div>
 <div class="flex items-center gap-4">
   <!-- Hamburger button -->
@@ -132,7 +144,8 @@
   <a class="font-funky text-sm uppercase text-white border-b border-white/10 pb-2" href="#" onclick="openAlbum('d2');document.getElementById('gallery').scrollIntoView({behavior:'smooth'});toggleMobileMenu();return false;">🎭 Day 2</a>
   <a class="font-funky text-sm uppercase text-white border-b border-white/10 pb-2" href="#" onclick="openAlbum('d3');document.getElementById('gallery').scrollIntoView({behavior:'smooth'});toggleMobileMenu();return false;">🎶 Day 3</a>
   <a class="font-funky text-sm uppercase text-white border-b border-white/10 pb-2" href="#" onclick="openAlbum('moto');document.getElementById('gallery').scrollIntoView({behavior:'smooth'});toggleMobileMenu();return false;">🏍️ Moto Show</a>
-  <a class="font-funky text-sm uppercase text-white" href="#" onclick="openAlbum('ethnic');document.getElementById('gallery').scrollIntoView({behavior:'smooth'});toggleMobileMenu();return false;">🪔 Ethnic Day</a>
+  <a class="font-funky text-sm uppercase text-white border-b border-white/10 pb-2" href="#" onclick="openAlbum('ethnic');document.getElementById('gallery').scrollIntoView({behavior:'smooth'});toggleMobileMenu();return false;">🪔 Ethnic Day</a>
+  <a class="font-funky text-sm uppercase text-white" href="#" onclick="openPreUtsav();document.getElementById('gallery').scrollIntoView({behavior:'smooth'});toggleMobileMenu();return false;">🎬 Pre UTSAV</a>
 </div>
 </nav>
 <!-- Hero Section -->
@@ -221,7 +234,7 @@
   <button onclick="closeLb()" class="absolute top-4 right-4 text-white font-funky text-3xl hover:text-primary z-10 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center">✕</button>
   <button onclick="lbMove(-1)" class="absolute left-0 top-1/2 -translate-y-1/2 text-white font-display text-5xl hover:text-primary z-10 px-3 py-4 min-w-[48px] min-h-[80px] flex items-center">‹</button>
   <button onclick="lbMove(1)" class="absolute right-0 top-1/2 -translate-y-1/2 text-white font-display text-5xl hover:text-primary z-10 px-3 py-4 min-w-[48px] min-h-[80px] flex items-center">›</button>
-  <img id="lb-img" src="" alt="" class="max-h-[85vh] max-w-[90vw] object-contain sticker-shadow"/>
+  <img id="lb-img" src="" alt="" class="max-h-[85vh] max-w-[90vw] object-contain" style="transform:translateZ(0)"/>
   <p id="lb-caption" class="font-funky text-[10px] text-on-surface-variant uppercase mt-4 tracking-widest"></p>
 </div>
 <!-- The Crew Section -->
@@ -556,6 +569,17 @@ const ALBUMS = [
   { id:'d3',     label:'Day 3',      emoji:'🎶', color:'#1A46A6' },
   { id:'ethnic', label:'Ethnic Day', emoji:'🪔', color:'#1A46A6' },
   { id:'moto',   label:'Moto Show',  emoji:'🏍️', color:'#1A46A6' },
+  { id:'preutsav', label:'Pre UTSAV', emoji:'🎬', color:'#1A46A6', isParent:true },
+];
+
+// Sub-albums under Pre UTSAV
+const PRE_UTSAV = [
+  { id:'pre_vc',       label:'VC Meet',         emoji:'🎓' },
+  { id:'pre_openmic1', label:'Open Mic 1',       emoji:'🎤' },
+  { id:'pre_openmic2', label:'Open Mic 2',       emoji:'🎤' },
+  { id:'pre_merch',    label:'Merch Reveal',     emoji:'👕' },
+  { id:'pre_jam',      label:'Jamming Session',  emoji:'🎸' },
+  { id:'pre_banner',   label:'Banner Drop',      emoji:'🏳️' },
 ];
 
 let manifest = {};
@@ -577,36 +601,87 @@ async function loadManifest() {
 }
 
 // ─── RENDER ALBUM CARDS ─────────────────────────────────────────────────────
+function makeAlbumCard(album, idx, totalPhotos, onclick) {
+  // Get cover photo from manifest (works for both regular and sub-albums)
+  const photos = manifest[album.id] || [];
+  const count  = totalPhotos !== undefined ? totalPhotos : photos.length;
+  const thumb  = photos.length > 0
+    ? `https://drive.google.com/thumbnail?id=${photos[0].id}&sz=w600`
+    : null;
+  const rotations = ['-rotate-2','rotate-1','-rotate-1','rotate-2','rotate-0','-rotate-1'];
+  const rot = rotations[idx % rotations.length];
+  const card = document.createElement('div');
+  card.className = `${rot} cursor-pointer group relative border-4 border-white overflow-hidden bg-surface-container-high sticker-shadow hover:scale-105 hover:border-primary transition-all duration-300`;
+  card.onclick = onclick;
+  card.innerHTML = `
+    <div class="aspect-[3/4] relative overflow-hidden">
+      ${thumb
+        ? `<img src="${thumb}" alt="${album.label}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" onerror="this.style.display='none'"/>`
+        : `<div class="w-full h-full flex items-center justify-center bg-surface-container-high text-6xl">${album.emoji}</div>`
+      }
+      <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
+    </div>
+    <div class="absolute bottom-0 left-0 right-0 p-4 bg-primary border-t-2 border-white">
+      <h3 class="font-display text-white text-lg uppercase tracking-wide">${album.emoji} ${album.label}</h3>
+      <p class="font-funky text-[9px] text-white uppercase tracking-widest">${count} photo${count !== 1 ? 's' : ''}</p>
+    </div>
+    <div class="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-4 bg-white opacity-60 skew-x-3"></div>
+  `;
+  return card;
+}
+
 function renderAlbums() {
   const grid = document.getElementById('albums-grid');
   grid.innerHTML = '';
-  ALBUMS.forEach(album => {
-    const photos = manifest[album.id] || [];
-    const count  = photos.length;
-    const thumb  = count > 0
-      ? `https://drive.google.com/thumbnail?id=${photos[0].id}&sz=w600`
-      : null;
+  ALBUMS.forEach((album, idx) => {
+    let card;
+    if (album.isParent) {
+      // Count total photos across all sub-albums
+      const total = PRE_UTSAV.reduce((sum, sub) => sum + (manifest[sub.id] || []).length, 0);
+      // Use first sub-album with photos as cover
+      let coverPhotos = [];
+      for (const sub of PRE_UTSAV) {
+        if ((manifest[sub.id] || []).length > 0) { coverPhotos = manifest[sub.id]; break; }
+      }
+      const pseudoAlbum = { id: PRE_UTSAV.find(s => coverPhotos === manifest[s.id])?.id || 'pre_vc', label: album.label, emoji: album.emoji };
+      card = makeAlbumCard(pseudoAlbum, idx, total, () => openPreUtsav());
+    } else {
+      card = makeAlbumCard(album, idx, undefined, () => openAlbum(album.id));
+    }
+    grid.appendChild(card);
+  });
+}
 
-    const rotations = ['-rotate-2','rotate-1','-rotate-1','rotate-2','rotate-0'];
-    const rot = rotations[ALBUMS.indexOf(album) % rotations.length];
+// ─── PRE UTSAV: show sub-album cards ────────────────────────────────────────
+function openPreUtsav() {
+  document.getElementById('albums-grid').classList.add('hidden');
+  document.getElementById('photo-view').classList.remove('hidden');
+  document.getElementById('album-title').textContent = '🎬 Pre UTSAV';
+  document.getElementById('photo-count').textContent = '6 events';
 
+  const grid = document.getElementById('photo-grid');
+  grid.className = 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4';
+  grid.innerHTML = '';
+
+  PRE_UTSAV.forEach((sub, idx) => {
+    const photos = manifest[sub.id] || [];
     const card = document.createElement('div');
-    card.className = `${rot} cursor-pointer group relative border-4 border-white overflow-hidden bg-surface-container-high sticker-shadow hover:scale-105 hover:border-primary transition-all duration-300`;
-    card.onclick = () => openAlbum(album.id);
+    card.className = 'cursor-pointer group border-4 border-white overflow-hidden bg-surface-container-high sticker-shadow hover:scale-105 hover:border-primary transition-all duration-300';
+    const thumb = photos.length > 0
+      ? `https://drive.google.com/thumbnail?id=${photos[0].id}&sz=w400`
+      : null;
+    card.onclick = () => openAlbum(sub.id);
     card.innerHTML = `
-      <div class="aspect-[3/4] relative overflow-hidden">
+      <div class="aspect-square relative overflow-hidden">
         ${thumb
-          ? `<img src="${thumb}" alt="${album.label}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"/>`
-          : `<div class="w-full h-full flex items-center justify-center bg-surface-container-high text-6xl">${album.emoji}</div>`
+          ? `<img src="${thumb}" alt="${sub.label}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" onerror="this.style.display='none'"/>`
+          : `<div class="w-full h-full flex items-center justify-center bg-surface-container-high text-4xl">${sub.emoji}</div>`
         }
-        <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
       </div>
-      <div class="absolute bottom-0 left-0 right-0 p-4 bg-primary border-t-2 border-white">
-        <h3 class="font-display text-white text-lg uppercase tracking-wide">${album.emoji} ${album.label}</h3>
-        <p class="font-funky text-[9px] text-white uppercase tracking-widest">${count} photo${count !== 1 ? 's' : ''}</p>
+      <div class="p-2 bg-primary border-t-2 border-white">
+        <p class="font-display text-white text-sm uppercase leading-tight">${sub.emoji} ${sub.label}</p>
+        <p class="font-funky text-[8px] text-white uppercase">${photos.length} photos</p>
       </div>
-      <!-- tape strip -->
-      <div class="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-4 bg-white opacity-60 skew-x-3"></div>
     `;
     grid.appendChild(card);
   });
@@ -614,7 +689,8 @@ function renderAlbums() {
 
 // ─── OPEN ALBUM ─────────────────────────────────────────────────────────────
 function openAlbum(id) {
-  const album = ALBUMS.find(a => a.id === id);
+  // Look in both ALBUMS and PRE_UTSAV arrays
+  const album = ALBUMS.find(a => a.id === id) || PRE_UTSAV.find(a => a.id === id);
   if (!album) return;
   currentPhotos = manifest[id] || [];
 
@@ -624,6 +700,7 @@ function openAlbum(id) {
   document.getElementById('photo-count').textContent = `${currentPhotos.length} photos`;
 
   const grid = document.getElementById('photo-grid');
+  grid.className = 'columns-1 xs:columns-2 sm:columns-2 md:columns-3 lg:columns-4 gap-3 space-y-3';
   grid.innerHTML = '';
 
   if (currentPhotos.length === 0) {
@@ -633,10 +710,24 @@ function openAlbum(id) {
 
   currentPhotos.forEach((photo, i) => {
     const wrapper = document.createElement('div');
-    wrapper.className = 'break-inside-avoid mb-3 cursor-pointer overflow-hidden border-2 border-white hover:border-primary sticker-shadow hover:scale-[1.02] transition-all duration-200';
+    wrapper.className = 'break-inside-avoid mb-3 cursor-pointer overflow-hidden border-2 border-white hover:border-primary hover:scale-[1.02] transition-all duration-200 [transform:translateZ(0)]';
     wrapper.onclick = () => openLb(i);
     const thumb = `https://drive.google.com/thumbnail?id=${photo.id}&sz=w600`;
-    wrapper.innerHTML = `<img src="${thumb}" alt="${photo.name || 'Photo'}" loading="lazy" class="w-full block"/>`;
+    const imgEl = document.createElement('img');
+    imgEl.alt = photo.name || 'Photo';
+    imgEl.className = 'w-full block';
+    imgEl.style.cssText = 'transform:translateZ(0);display:block;min-height:60px;background:#111';
+    imgEl.src = `https://drive.google.com/thumbnail?id=${photo.id}&sz=w800`;
+    imgEl.onerror = function() {
+      // try smaller size once, then hide the broken card entirely
+      if (!this.dataset.retried) {
+        this.dataset.retried = '1';
+        this.src = `https://drive.google.com/thumbnail?id=${photo.id}&sz=w400`;
+      } else {
+        wrapper.style.display = 'none'; // hide completely if still broken
+      }
+    };
+    wrapper.appendChild(imgEl);
     grid.appendChild(wrapper);
   });
 }
@@ -645,6 +736,8 @@ function openAlbum(id) {
 function showAlbums() {
   document.getElementById('photo-view').classList.add('hidden');
   document.getElementById('albums-grid').classList.remove('hidden');
+  // Reset photo grid back to masonry mode for next time
+  document.getElementById('photo-grid').className = 'columns-1 xs:columns-2 sm:columns-2 md:columns-3 lg:columns-4 gap-3 space-y-3';
 }
 
 // ─── LIGHTBOX ───────────────────────────────────────────────────────────────
@@ -658,8 +751,18 @@ function openLb(i) {
 
 function updateLb() {
   const photo = currentPhotos[lbIdx];
-  const fullUrl = `https://drive.google.com/uc?export=view&id=${photo.id}`;
-  document.getElementById('lb-img').src = fullUrl;
+  // Use Drive thumbnail API at high res — avoids Google's virus-scan redirect
+  // that breaks uc?export=view for large files
+  const fullUrl = `https://drive.google.com/thumbnail?id=${photo.id}&sz=w1600`;
+  const img = document.getElementById('lb-img');
+  img.style.opacity = '0';
+  img.src = fullUrl;
+  img.onload = () => { img.style.transition = 'opacity 0.25s'; img.style.opacity = '1'; };
+  img.onerror = () => {
+    // fallback to w800 if w1600 fails
+    img.src = `https://drive.google.com/thumbnail?id=${photo.id}&sz=w800`;
+    img.style.opacity = '1';
+  };
   document.getElementById('lb-caption').textContent = `${photo.name || ''} · ${lbIdx + 1} / ${currentPhotos.length}`;
 }
 
