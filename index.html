@@ -650,6 +650,21 @@ function makeCard(album, idx, count, thumb, onclick) {
   return card;
 }
 
+
+// Cover photo overrides — photo filename (partial match) per album ID
+const COVER_NAMES = {
+  'preutsav': 'DSC_1614',   // Pre UTSAV parent card
+  'pre_jam':  'DSC_1614',   // Jamming Session card
+};
+
+function getCoverThumb(albumId, photos) {
+  const override = COVER_NAMES[albumId];
+  if (override && photos.length) {
+    const match = photos.find(p => (p.name||'').includes(override));
+    if (match) return `https://drive.google.com/thumbnail?id=${match.id}&sz=w600`;
+  }
+  return photos.length ? `https://drive.google.com/thumbnail?id=${photos[0].id}&sz=w600` : null;
+}
 function renderAlbums() {
   const grid = document.getElementById('albums-grid');
   grid.innerHTML = '';
@@ -657,12 +672,12 @@ function renderAlbums() {
     let thumb = null, count = 0;
     if (album.isParent) {
       count = PRE_UTSAV.reduce((s,sub) => s+(manifest[sub.id]||[]).length, 0);
-      for (const sub of PRE_UTSAV) { if ((manifest[sub.id]||[]).length) { thumb=`https://drive.google.com/thumbnail?id=${manifest[sub.id][0].id}&sz=w600`; break; } }
+      for (const sub of PRE_UTSAV) { const sp=(manifest[sub.id]||[]); if (sp.length) { thumb=getCoverThumb('preutsav', sp); break; } }
       grid.appendChild(makeCard(album, idx, count, thumb, () => openPreUtsav()));
     } else {
       const photos = manifest[album.id]||[];
       count = photos.length;
-      thumb = count ? `https://drive.google.com/thumbnail?id=${photos[0].id}&sz=w600` : null;
+      thumb = count ? getCoverThumb(album.id, photos) : null;
       grid.appendChild(makeCard(album, idx, count, thumb, () => openAlbum(album.id)));
     }
   });
