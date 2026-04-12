@@ -700,7 +700,7 @@ function openPreUtsav() {
   grid.innerHTML = '';
   PRE_UTSAV.forEach((sub, idx) => {
     const photos = manifest[sub.id]||[];
-    const thumb = photos.length ? `https://drive.google.com/thumbnail?id=${photos[0].id}&sz=w400` : null;
+    const thumb = photos.length ? getCoverThumb(sub.id, photos).replace('w600','w400') : (COVER_IDS[sub.id] ? `https://drive.google.com/thumbnail?id=${COVER_IDS[sub.id]}&sz=w400` : null);
     const card = document.createElement('div');
     card.className = 'cursor-pointer group border-4 border-white overflow-hidden hover:scale-105 hover:border-primary transition-all duration-300 [transform:translateZ(0)]';
     card.onclick = () => openAlbum(sub.id);
