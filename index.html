@@ -653,11 +653,18 @@ function makeCard(album, idx, count, thumb, onclick) {
 
 // Cover photo overrides — photo filename (partial match) per album ID
 const COVER_NAMES = {
-  'preutsav': 'DSC_1614',   // Pre UTSAV parent card
-  'pre_jam':  'A-47',       // Jamming Session card
+  'preutsav': 'DSC_1614',   // Pre UTSAV parent card — match by filename
+};
+
+// Hardcoded cover IDs (take priority over filename matches)
+const COVER_IDS = {
+  'pre_jam': '1PBjM4h0PAhWObdiO-8AwDlHT4A0K14W8',  // Jamming Session
 };
 
 function getCoverThumb(albumId, photos) {
+  // Hardcoded ID wins first
+  if (COVER_IDS[albumId]) return `https://drive.google.com/thumbnail?id=${COVER_IDS[albumId]}&sz=w600`;
+  // Filename match next
   const override = COVER_NAMES[albumId];
   if (override && photos.length) {
     const match = photos.find(p => (p.name||'').includes(override));
