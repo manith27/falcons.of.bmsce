@@ -130,17 +130,24 @@ def is_image(name):
     return any(name.lower().endswith(ext) for ext in IMAGE_EXTENSIONS)
 
 
-def get_photos(folder_id):
-    """Return list of photo entries from a Drive folder."""
-    files  = drive_list(folder_id)
-    images = [f for f in files if is_image(f["name"])]
-    return [
-        {
-            "id":   img["id"],
-            "name": img["name"],
-        }
-        for img in images
-    ]
+def get_photos(folder_id, _depth=0):
+    """Return list of photo entries from a Drive folder, recursively scanning sub-folders."""
+    items  = drive_list(folder_id)
+    photos = []
+
+    # Collect images directly in this folder
+    for f in items:
+        if is_image(f["name"]):
+            photos.append({"id": f["id"], "name": f["name"]})
+
+    # Recurse into any sub-folders (up to 3 levels deep)
+    if _depth < 3:
+        sub_folders = [f for f in items if f.get("mimeType") == "application/vnd.google-apps.folder"]
+        for sub in sub_folders:
+            print(f"{'         ' * (_depth+1)}📂  Sub-folder: {sub['name']}")
+            photos.extend(get_photos(sub["id"], _depth + 1))
+
+    return photos
 
 
 def main():
