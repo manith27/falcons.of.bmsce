@@ -180,14 +180,32 @@ def main():
         if fname in TOP_LEVEL_MAP:
             key = TOP_LEVEL_MAP[fname]
             print(f"  📁  {fname}  →  [{key}]")
-            photos = get_photos(fid)
-            if photos:
+            items = drive_list(fid)
+
+            # Separate direct images from sub-folders
+            direct = [{"id": f["id"], "name": f["name"]} for f in items if is_image(f["name"])]
+            sub_folders = [f for f in items if f.get("mimeType") == "application/vnd.google-apps.folder"]
+
+            if sub_folders:
+                # Store sub-folder structure
+                manifest[key] = direct  # photos directly in root (if any)
+                manifest[key + "_subs"] = []
+                for sub in sorted(sub_folders, key=lambda x: x["name"]):
+                    sub_key = f"{key}__{sub['name']}"
+                    sub_photos = get_photos(sub["id"])
+                    manifest[sub_key] = sub_photos
+                    manifest[key + "_subs"].append({"key": sub_key, "name": sub["name"]})
+                    total_photos += len(sub_photos)
+                    print(f"       📂  {sub['name']}  →  [{sub_key}]  ({len(sub_photos)} photos)")
+                print(f"       ✅  {len(sub_folders)} sub-folders\n")
+            else:
+                photos = direct if direct else get_photos(fid)
                 manifest[key] = photos
                 total_photos += len(photos)
-                print(f"       ✅  {len(photos)} photos\n")
-            else:
-                manifest[key] = []
-                print(f"       ⚠️  Empty (no images yet)\n")
+                if photos:
+                    print(f"       ✅  {len(photos)} photos\n")
+                else:
+                    print(f"       ⚠️  Empty (no images yet)\n")
 
         # ── Pre Utsav — scan its sub-folders ──────────────────────────────────
         elif fname == "Pre Utsav":

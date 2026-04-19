@@ -214,7 +214,7 @@
     <div id="albums-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-12"></div>
     <div id="photo-view" class="hidden">
       <div class="flex items-center justify-between mb-8 flex-wrap gap-3">
-        <button onclick="showAlbums()" class="font-funky text-[10px] uppercase tracking-widest text-primary border border-primary px-4 py-2 hover:bg-primary hover:text-white transition-colors">← Back</button>
+        <button id="back-btn" onclick="showAlbums()" class="font-funky text-[10px] uppercase tracking-widest text-primary border border-primary px-4 py-2 hover:bg-primary hover:text-white transition-colors">← Back</button>
         <h3 id="album-title" class="font-display text-2xl md:text-3xl text-white uppercase glitch-text"></h3>
         <span id="photo-count" class="font-funky text-[10px] text-on-surface-variant uppercase"></span>
       </div>
@@ -683,8 +683,22 @@ function renderAlbums() {
       grid.appendChild(makeCard(album, idx, count, thumb, () => openPreUtsav()));
     } else {
       const photos = manifest[album.id]||[];
-      count = photos.length;
-      thumb = count ? getCoverThumb(album.id, photos) : null;
+      const subs = manifest[album.id + '_subs'];
+      if (subs) {
+        count = (photos.length) + subs.reduce((s,sub) => s+(manifest[sub.key]||[]).length, 0);
+        // Get cover from first sub-folder that has photos
+        if (COVER_IDS[album.id]) {
+          thumb = `https://drive.google.com/thumbnail?id=${COVER_IDS[album.id]}&sz=w600`;
+        } else {
+          for (const sub of subs) {
+            const sp = manifest[sub.key]||[];
+            if (sp.length) { thumb = getCoverThumb(album.id, sp); break; }
+          }
+        }
+      } else {
+        count = photos.length;
+        thumb = count ? getCoverThumb(album.id, photos) : null;
+      }
       grid.appendChild(makeCard(album, idx, count, thumb, () => openAlbum(album.id)));
     }
   });
@@ -721,6 +735,14 @@ function openPreUtsav() {
 function openAlbum(id) {
   const album = [...ALBUMS, ...PRE_UTSAV].find(a => a.id===id);
   if (!album) return;
+
+  // Check if this album has sub-folders
+  const subs = manifest[id + '_subs'];
+  if (subs && subs.length) {
+    openSubFolderView(id, album);
+    return;
+  }
+
   currentPhotos = manifest[id]||[];
   document.getElementById('albums-grid').classList.add('hidden');
   document.getElementById('photo-view').classList.remove('hidden');
@@ -758,7 +780,86 @@ function openAlbum(id) {
   });
 }
 
+
+function openSubFolderView(albumId, album) {
+  document.getElementById('albums-grid').classList.add('hidden');
+  document.getElementById('photo-view').classList.remove('hidden');
+  const subs = manifest[albumId + '_subs'] || [];
+  const total = subs.reduce((s,sub) => s+(manifest[sub.key]||[]).length, 0);
+  document.getElementById('album-title').textContent = `${album.emoji} ${album.label}`;
+  document.getElementById('photo-count').textContent = `${subs.length} folders · ${total} photos`;
+  const grid = document.getElementById('photo-grid');
+  grid.className = 'grid grid-cols-2 sm:grid-cols-3 gap-4';
+  grid.innerHTML = '';
+
+  // Back button label update
+  const backBtn = document.getElementById('back-btn');
+  if (backBtn) backBtn.dataset.parent = albumId;
+
+  subs.forEach((sub, idx) => {
+    const photos = manifest[sub.key] || [];
+    const thumb = photos.length ? getCoverThumb(sub.key, photos).replace('w600','w400') : null;
+    const card = document.createElement('div');
+    card.className = 'cursor-pointer group border-4 border-white overflow-hidden hover:scale-105 hover:border-primary transition-all duration-300 [transform:translateZ(0)]';
+    card.onclick = () => openSubAlbum(sub.key, sub.name, albumId, album);
+    card.innerHTML = `
+      <div class="aspect-[3/4] relative overflow-hidden bg-surface-container-high">
+        ${thumb ? `<img src="${thumb}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" onerror="this.style.display='none'">` : ''}
+        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+        <div class="absolute bottom-0 left-0 right-0 p-3">
+          <p class="font-funky text-[9px] uppercase tracking-widest text-primary mb-1">📁 Sub-folder</p>
+          <p class="font-display text-sm font-black uppercase text-white leading-tight">${sub.name}</p>
+          <p class="font-funky text-[8px] text-white/60 mt-1 uppercase">${photos.length} photos</p>
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+function openSubAlbum(key, name, parentId, parentAlbum) {
+  currentPhotos = manifest[key] || [];
+  document.getElementById('album-title').textContent = `📁 ${name}`;
+  document.getElementById('photo-count').textContent = `${currentPhotos.length} photos`;
+  const grid = document.getElementById('photo-grid');
+  grid.className = 'columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-3 space-y-3';
+  grid.innerHTML = '';
+
+  // Store parent so back button returns to sub-folder view
+  const backBtn = document.getElementById('back-btn');
+  if (backBtn) { backBtn.dataset.parent = parentId; backBtn.dataset.subview = '1'; }
+
+  if (!currentPhotos.length) {
+    grid.innerHTML = `<p class="font-funky text-xs text-on-surface-variant uppercase tracking-widest text-center py-16 col-span-4">No photos yet</p>`;
+    return;
+  }
+  currentPhotos.forEach((photo, i) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'break-inside-avoid mb-3 cursor-pointer overflow-hidden group [transform:translateZ(0)]';
+    wrapper.onclick = () => openLb(i);
+    const img = document.createElement('img');
+    const urls = [
+      `https://drive.google.com/thumbnail?id=${photo.id}&sz=w800`,
+      `https://lh3.googleusercontent.com/d/${photo.id}=w800`,
+      `https://drive.google.com/thumbnail?id=${photo.id}&sz=w400`,
+    ];
+    let urlIdx = 0;
+    img.src = urls[urlIdx];
+    img.alt = photo.name || '';
+    img.className = 'w-full h-auto object-cover group-hover:scale-105 transition-transform duration-300';
+    img.onerror = function() { urlIdx++; if(urlIdx<urls.length){this.src=urls[urlIdx];}else{wrapper.style.display='none';} };
+    wrapper.appendChild(img);
+    grid.appendChild(wrapper);
+  });
+}
+
 function showAlbums() {
+  const backBtn = document.getElementById('back-btn');
+  if (backBtn && backBtn.dataset.subview === '1') {
+    const parentId = backBtn.dataset.parent;
+    const parentAlbum = ALBUMS.find(a => a.id === parentId);
+    backBtn.dataset.subview = '';
+    if (parentAlbum) { openSubFolderView(parentId, parentAlbum); return; }
+  }
   document.getElementById('photo-view').classList.add('hidden');
   document.getElementById('albums-grid').classList.remove('hidden');
   document.getElementById('photo-grid').className = 'columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-3 space-y-3';
