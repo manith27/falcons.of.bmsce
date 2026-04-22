@@ -64,12 +64,17 @@ DRIVE_API        = "https://www.googleapis.com/drive/v3"
 
 # Maps Drive folder names → manifest keys used by the website
 TOP_LEVEL_MAP = {
-    "Day 1":      "d1",
-    "Day 2":      "d2",
-    "Day 3":      "d3",
     "Ethnic Day": "ethnic",
     "Moto Show":  "moto",
     # "Pre Utsav" is handled specially below (nested)
+    # Day 1, 2, 3 use custom folder IDs below
+}
+
+# ── Custom folder IDs for Day 1, 2, 3 (separate Drive folders) ───────────────
+DAY_FOLDERS = {
+    "d1": {"id": "1O8-iz246MsNO32pwu5q6fxltyK-xXxSG", "label": "Day 1", "emoji": "📸"},
+    "d2": {"id": "1zRURd8VW0QRaVp769xgjbfgQ4Wgkx1uw", "label": "Day 2", "emoji": "🎭"},
+    "d3": {"id": "1Z2d1ij2e6k22VND6XKLphewTjB4PijSW", "label": "Day 3", "emoji": "🎶"},
 }
 
 PRE_UTSAV_MAP = {
@@ -172,11 +177,52 @@ def main():
     manifest = {}
     total_photos = 0
 
+    # ── Scan Day 1, 2, 3 from their own custom folders ───────────────────────
+    for key, info in DAY_FOLDERS.items():
+        fid = info["id"]
+        label = info["label"]
+        if "PASTE_" in fid:
+            print(f"  ⚠️   {label}: folder ID not set — skipping\n")
+            manifest[key] = []
+            continue
+        print(f"  📁  {label}  →  [{key}]")
+        items = drive_list(fid)
+        direct = [{"id": f["id"], "name": f["name"]} for f in items if is_image(f["name"])]
+        sub_folders = [f for f in items if f.get("mimeType") == "application/vnd.google-apps.folder"]
+
+        if sub_folders:
+            manifest[key] = direct
+            merged = {}
+            for sub in sorted(sub_folders, key=lambda x: x["name"].strip()):
+                sname = sub["name"].strip()
+                sub_photos = get_photos(sub["id"])
+                if sname in merged:
+                    merged[sname].extend(sub_photos)
+                else:
+                    merged[sname] = sub_photos
+
+            manifest[key + "_subs"] = []
+            kept = 0
+            for sname, sub_photos in merged.items():
+                if not sub_photos:
+                    continue
+                sub_key = f"{key}__{sname}"
+                manifest[sub_key] = sub_photos
+                manifest[key + "_subs"].append({"key": sub_key, "name": sname})
+                total_photos += len(sub_photos)
+                kept += 1
+                print(f"       📂  {sname}  ({len(sub_photos)} photos)")
+            print(f"       ✅  {kept} sub-folders with photos\n")
+        else:
+            manifest[key] = direct
+            total_photos += len(direct)
+            print(f"       ✅  {len(direct)} photos\n")
+
     for folder in root_folders:
-        fname = folder["name"].strip()   # strip accidental spaces
+        fname = folder["name"].strip()
         fid   = folder["id"]
 
-        # ── Standard top-level albums (Day 1–3, Ethnic Day, Moto Show) ────────
+        # ── Ethnic Day, Moto Show ─────────────────────────────────────────────
         if fname in TOP_LEVEL_MAP:
             key = TOP_LEVEL_MAP[fname]
             print(f"  📁  {fname}  →  [{key}]")
@@ -186,38 +232,13 @@ def main():
             direct = [{"id": f["id"], "name": f["name"]} for f in items if is_image(f["name"])]
             sub_folders = [f for f in items if f.get("mimeType") == "application/vnd.google-apps.folder"]
 
-            if sub_folders:
-                # Store sub-folder structure — merge duplicates, strip spaces, skip empty
-                manifest[key] = direct
-                merged = {}  # name → combined photos list
-                for sub in sorted(sub_folders, key=lambda x: x["name"].strip()):
-                    sname = sub["name"].strip()
-                    sub_photos = get_photos(sub["id"])
-                    if sname in merged:
-                        merged[sname].extend(sub_photos)  # merge duplicate folders
-                    else:
-                        merged[sname] = sub_photos
-
-                manifest[key + "_subs"] = []
-                kept = 0
-                for sname, sub_photos in merged.items():
-                    if not sub_photos:
-                        continue  # skip empty folders
-                    sub_key = f"{key}__{sname}"
-                    manifest[sub_key] = sub_photos
-                    manifest[key + "_subs"].append({"key": sub_key, "name": sname})
-                    total_photos += len(sub_photos)
-                    kept += 1
-                    print(f"       📂  {sname}  →  [{sub_key}]  ({len(sub_photos)} photos)")
-                print(f"       ✅  {kept} sub-folders with photos (skipped {len(sub_folders)-kept} empty/duplicate)\n")
+            photos = get_photos(fid)
+            manifest[key] = photos
+            total_photos += len(photos)
+            if photos:
+                print(f"       ✅  {len(photos)} photos\n")
             else:
-                photos = direct if direct else get_photos(fid)
-                manifest[key] = photos
-                total_photos += len(photos)
-                if photos:
-                    print(f"       ✅  {len(photos)} photos\n")
-                else:
-                    print(f"       ⚠️  Empty (no images yet)\n")
+                print(f"       ⚠️  Empty (no images yet)\n")
 
         # ── Pre Utsav — scan its sub-folders ──────────────────────────────────
         elif fname == "Pre Utsav":
