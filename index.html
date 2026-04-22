@@ -798,6 +798,7 @@ function openSubFolderView(albumId, album) {
 
   subs.forEach((sub, idx) => {
     const photos = manifest[sub.key] || [];
+    if (!photos.length) return; // skip empty sub-folders
     const thumb = photos.length ? getCoverThumb(sub.key, photos).replace('w600','w400') : null;
     const card = document.createElement('div');
     card.className = 'cursor-pointer group border-4 border-white overflow-hidden hover:scale-105 hover:border-primary transition-all duration-300 [transform:translateZ(0)]';

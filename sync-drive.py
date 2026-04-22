@@ -187,17 +187,29 @@ def main():
             sub_folders = [f for f in items if f.get("mimeType") == "application/vnd.google-apps.folder"]
 
             if sub_folders:
-                # Store sub-folder structure
-                manifest[key] = direct  # photos directly in root (if any)
-                manifest[key + "_subs"] = []
-                for sub in sorted(sub_folders, key=lambda x: x["name"]):
-                    sub_key = f"{key}__{sub['name']}"
+                # Store sub-folder structure — merge duplicates, strip spaces, skip empty
+                manifest[key] = direct
+                merged = {}  # name → combined photos list
+                for sub in sorted(sub_folders, key=lambda x: x["name"].strip()):
+                    sname = sub["name"].strip()
                     sub_photos = get_photos(sub["id"])
+                    if sname in merged:
+                        merged[sname].extend(sub_photos)  # merge duplicate folders
+                    else:
+                        merged[sname] = sub_photos
+
+                manifest[key + "_subs"] = []
+                kept = 0
+                for sname, sub_photos in merged.items():
+                    if not sub_photos:
+                        continue  # skip empty folders
+                    sub_key = f"{key}__{sname}"
                     manifest[sub_key] = sub_photos
-                    manifest[key + "_subs"].append({"key": sub_key, "name": sub["name"]})
+                    manifest[key + "_subs"].append({"key": sub_key, "name": sname})
                     total_photos += len(sub_photos)
-                    print(f"       📂  {sub['name']}  →  [{sub_key}]  ({len(sub_photos)} photos)")
-                print(f"       ✅  {len(sub_folders)} sub-folders\n")
+                    kept += 1
+                    print(f"       📂  {sname}  →  [{sub_key}]  ({len(sub_photos)} photos)")
+                print(f"       ✅  {kept} sub-folders with photos (skipped {len(sub_folders)-kept} empty/duplicate)\n")
             else:
                 photos = direct if direct else get_photos(fid)
                 manifest[key] = photos
